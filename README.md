@@ -198,6 +198,23 @@ bin/console skeepers:product-reviews:sync [--since=2026-10-01] [--raw-dir=var/sk
   written as accepted;
 - then the average rating and the review count of the reviewed products are computed again.
 
+## Scheduling
+
+Both commands are meant to run unattended. A crontab for the user that runs your shop, with
+`flock` so that a slow run is never overlapped by the next one:
+
+```cron
+# Review requests: send the queued orders every 5 minutes (does nothing while the plugin is disabled)
+*/5 * * * * cd /path/to/shop && flock -n /tmp/skeepers-send.lock php bin/console skeepers:purchase-events:send >> var/log/skeepers-send.log 2>&1
+
+# Product reviews: import the reviews published since yesterday, once a night
+15 3 * * * cd /path/to/shop && flock -n /tmp/skeepers-reviews.lock php bin/console skeepers:product-reviews:sync --since=$(date -d yesterday +\%F) >> var/log/skeepers-reviews.log 2>&1
+```
+
+In a crontab, `%` must be escaped (`\%`). The review request delays are set in the Skeepers
+portal (Settings › Order retrieval), not here: the plugin sends the order as soon as it is
+queued, and Skeepers schedules the email.
+
 ## Widgets
 
 Each widget is the script URL given by the portal (`src`, with `defer`, `async`, `charset`) or
