@@ -1,0 +1,49 @@
+{
+    "name": "altmenorg/sylius-skeepers-plugin",
+    "type": "sylius-plugin",
+    "description": "Sylius 2 plugin for Skeepers (Verified Reviews / Avis Vérifiés): send orders as purchase events to trigger review requests, and import the published product reviews.",
+    "keywords": ["sylius", "sylius-plugin", "skeepers", "verified-reviews", "avis-verifies", "reviews", "purchase-events"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Altmenorg",
+            "homepage": "https://github.com/altmenorg"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "doctrine/dbal": "^3.8 || ^4.0",
+        "doctrine/orm": "^2.18 || ^3.0",
+        "sylius/sylius": "^2.0",
+        "symfony/console": "^6.4 || ^7.0",
+        "symfony/framework-bundle": "^6.4 || ^7.0",
+        "symfony/http-client": "^6.4 || ^7.0",
+        "symfony/property-access": "^6.4 || ^7.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5 || ^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Altmenorg\\SyliusSkeepersPlugin\\": "src/",
+            "Altmenorg\\SyliusSkeepersPlugin\\Migrations\\": "migrations/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Altmenorg\\SyliusSkeepersPlugin\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": false,
+            "symfony/flex": false
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1-dev"
+        }
+    }
+}

@@ -1,0 +1,156 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Altmenorg\SyliusSkeepersPlugin\DependencyInjection;
+
+use Symfony\Component\Config\Definition\Builder\TreeBuilder;
+use Symfony\Component\Config\Definition\ConfigurationInterface;
+
+final class Configuration implements ConfigurationInterface
+{
+    public const TRIGGER_MANUAL = 'manual';
+    public const TRIGGER_ORDER_FULFILLED = 'order_fulfilled';
+    public const TRIGGER_SHIPMENT_SHIPPED = 'shipment_shipped';
+
+    public const PLACEMENT_HEAD = 'head';
+    public const PLACEMENT_BODY_END = 'body_end';
+    public const PLACEMENT_MANUAL = 'manual';
+
+    public function getConfigTreeBuilder(): TreeBuilder
+    {
+        $treeBuilder = new TreeBuilder('altmenorg_sylius_skeepers');
+        $treeBuilder->getRootNode()
+            ->children()
+                ->scalarNode('client_id')
+                    ->info('API account client ID (Skeepers portal: Collect reviews > Review request sending > API).')
+                    ->defaultNull()
+                ->end()
+                ->scalarNode('client_secret')->defaultNull()->end()
+                ->scalarNode('token_url')
+                    ->defaultValue('https://auth.skeepers.io/realms/skeepers/protocol/openid-connect/token')
+                ->end()
+                ->scalarNode('api_url')->defaultValue('https://api.skeepers.io')->end()
+                ->integerNode('timeout')->info('HTTP timeout in seconds.')->defaultValue(30)->min(1)->end()
+
+                ->arrayNode('purchase_events')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')
+                            ->info('Safety switch. While false, nothing is queued and nothing is sent: every purchase event makes Skeepers email a review request to a real customer.')
+                            ->defaultFalse()
+                        ->end()
+                        ->scalarNode('website_id')->info('Skeepers website ID (UUID).')->defaultNull()->end()
+                        ->scalarNode('audience')
+                            ->info('Token audience. Not needed by the purchase-event API (checked 2026-10-25).')
+                            ->defaultNull()
+                        ->end()
+                        ->enumNode('trigger')
+                            ->info('When an order is queued: "manual" (your code calls PurchaseEventQueue::enqueue()), "order_fulfilled" (order workflow "fulfill"), "shipment_shipped" (shipment workflow "ship").')
+                            ->values([self::TRIGGER_MANUAL, self::TRIGGER_ORDER_FULFILLED, self::TRIGGER_SHIPMENT_SHIPPED])
+                            ->defaultValue(self::TRIGGER_MANUAL)
+                        ->end()
+                        ->integerNode('batch_size')
+                            ->info('Purchase events per request. The API takes 50 at most.')
+                            ->defaultValue(50)->min(1)->max(50)
+                        ->end()
+                        ->arrayNode('excluded_product_codes')
+                            ->info('Products never sent (services such as gift wrapping).')
+                            ->scalarPrototype()->end()
+                            ->defaultValue([])
+                        ->end()
+                        ->scalarNode('excluded_item_flag')
+                            ->info('Property path on the order item; when it reads true, the line is not sent (for example "giftWrap").')
+                            ->defaultNull()
+                        ->end()
+                        ->scalarNode('language')
+                            ->info('Consumer language. Null: taken from the order locale ("fr_FR" gives "fr").')
+                            ->defaultNull()
+                        ->end()
+                        ->scalarNode('brand_path')
+                            ->info('Property path on the product that reads the brand name (for example "brand.name").')
+                            ->defaultNull()
+                        ->end()
+                        ->scalarNode('default_brand')->info('Brand sent when brand_path gives nothing.')->defaultNull()->end()
+                        ->scalarNode('ean_path')
+                            ->info('Property path on the variant that reads the EAN (for example "ean13").')
+                            ->defaultNull()
+                        ->end()
+                        ->scalarNode('product_route')
+                            ->info('Route of the product page, used by the default link resolver (parameters: slug, _locale).')
+                            ->defaultValue('sylius_shop_product_show')
+                        ->end()
+                        ->scalarNode('image_base_url')
+                            ->info('Prefix of the image paths, used by the default link resolver. Null: no image URL.')
+                            ->defaultNull()
+                        ->end()
+                        ->integerNode('max_order_age_days')
+                            ->info('Orders placed longer ago than this are skipped instead of sent. Null: no limit.')
+                            ->defaultValue(90)->min(1)
+                        ->end()
+                    ->end()
+                ->end()
+
+                ->arrayNode('product_reviews')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->scalarNode('audience')->defaultValue('verified-reviews')->end()
+                        ->scalarNode('path')->defaultValue('/verified-reviews/v1/published/products/reviews')->end()
+                        ->integerNode('page_size')->defaultValue(200)->min(1)->max(200)->end()
+                        ->integerNode('page_delay_ms')
+                            ->info('Pause between two pages (the API allows 400 requests a minute).')
+                            ->defaultValue(200)->min(0)
+                        ->end()
+                        ->scalarNode('locale')->info('Locale of the slugs matched against product_page_url.')->defaultValue('en_US')->end()
+                        ->booleanNode('match_by_url')
+                            ->info('Default resolver: find the product by the slug of product_page_url first.')
+                            ->defaultTrue()
+                        ->end()
+                        ->scalarNode('url_pattern')
+                            ->info('Regular expression whose first group is the slug in product_page_url.')
+                            ->defaultValue('#/([^/]+)\.html$#')
+                        ->end()
+                        ->arrayNode('bot_customer')
+                            ->info('Customer given as author when the reviewed order is not in the shop.')
+                            ->addDefaultsIfNotSet()
+                            ->children()
+                                ->scalarNode('email')->defaultValue('verified-reviews@example.invalid')->end()
+                                ->scalarNode('first_name')->defaultValue('Verified')->end()
+                                ->scalarNode('last_name')->defaultValue('Reviews')->end()
+                            ->end()
+                        ->end()
+                        ->scalarNode('raw_dir')->info('Where to keep the raw API answers (JSON lines). Null: not kept.')->defaultNull()->end()
+                    ->end()
+                ->end()
+
+                ->arrayNode('widgets')
+                    ->info('Skeepers widgets (script given by the portal), by name. None configured: nothing is added to the pages.')
+                    ->useAttributeAsKey('name')
+                    ->arrayPrototype()
+                        ->children()
+                            ->booleanNode('enabled')->defaultTrue()->end()
+                            ->scalarNode('src')->info('Script URL given by Skeepers.')->defaultNull()->end()
+                            ->booleanNode('defer')->defaultTrue()->end()
+                            ->booleanNode('async')->defaultFalse()->end()
+                            ->scalarNode('charset')->defaultValue('utf-8')->end()
+                            ->scalarNode('code')
+                                ->info('Or the code to paste as it is (a <script> tag, a <div>…), instead of src.')
+                                ->defaultNull()
+                            ->end()
+                            ->enumNode('placement')
+                                ->info('"head" (end of <head>), "body_end" (end of <body>), both on shop pages; "manual": only where the template calls skeepers_widget(name).')
+                                ->values([self::PLACEMENT_HEAD, self::PLACEMENT_BODY_END, self::PLACEMENT_MANUAL])
+                                ->defaultValue(self::PLACEMENT_HEAD)
+                            ->end()
+                        ->end()
+                        ->validate()
+                            ->ifTrue(static fn (array $w): bool => ($w['src'] === null || $w['src'] === '') === ($w['code'] === null || $w['code'] === ''))
+                            ->thenInvalid('A Skeepers widget needs either "src" or "code".')
+                        ->end()
+                    ->end()
+                ->end()
+            ->end();
+
+        return $treeBuilder;
+    }
+}
